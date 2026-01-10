@@ -138,7 +138,7 @@ class WorkerThread(QThread):
             self.run_sheerlink()
 
     def run_sheerlink(self):
-        """执行SheerLink提取任务 (多线程)"""
+        """执行SheerLink提取任务 (多线程) + 统计"""
         ids_to_process = self.kwargs.get('ids', [])
         thread_count = self.kwargs.get('thread_count', 1)
         
@@ -147,6 +147,17 @@ class WorkerThread(QThread):
              return
         
         self.log(f"\n[开始] 提取 SheerID Link 任务，共 {len(ids_to_process)} 个窗口，并发数: {thread_count}...")
+        
+        # Stats counters
+        stats = {
+            'link_unverified': 0,
+            'link_verified': 0,
+            'subscribed': 0,
+            'ineligible': 0,
+            'timeout': 0,
+            'error': 0
+        }
+        
         success_count = 0
         
         with ThreadPoolExecutor(max_workers=thread_count) as executor:
@@ -174,11 +185,39 @@ class WorkerThread(QThread):
                         success_count += 1
                     else:
                         self.log(f"[失败] ({finished_tasks}/{len(ids_to_process)}) {bid}: {msg}")
+                        
+                    # Stats Logic
+                    if "Verified Link" in msg or "Get Offer" in msg or "Offer Ready" in msg:
+                        stats['link_verified'] += 1
+                    elif "Unverified Link" in msg or "Link Found" in msg or "提取成功" in msg:
+                        stats['link_unverified'] += 1
+                    elif "Subscribed" in msg or "已绑卡" in msg:
+                        stats['subscribed'] += 1
+                    elif "无资格" in msg or "not available" in msg:
+                        stats['ineligible'] += 1
+                    elif "超时" in msg or "Timeout" in msg:
+                        stats['timeout'] += 1
+                    else:
+                        stats['error'] += 1
+                        
                 except Exception as e:
                     self.log(f"[异常] ({finished_tasks}/{len(ids_to_process)}) {bid}: {e}")
+                    stats['error'] += 1
 
-        self.log(f"[完成] 提取任务结束，成功 {success_count}/{len(ids_to_process)}")
-        self.finished_signal.emit({'type': 'sheerlink', 'count': success_count})
+        # Final Report
+        summary_msg = (
+            f"📊 任务统计报告:\n"
+            f"--------------------------------\n"
+            f"🔗 有资格待验证:   {stats['link_unverified']}\n"
+            f"✅ 已过验证未绑卡: {stats['link_verified']}\n"
+            f"💳 已过验证已绑卡: {stats['subscribed']}\n"
+            f"❌ 无资格 (不可用): {stats['ineligible']}\n"
+            f"⏳ 超时/错误:      {stats['timeout'] + stats['error']}\n"
+            f"--------------------------------\n"
+            f"总计处理: {finished_tasks}/{len(ids_to_process)}"
+        )
+        self.log(f"\n{summary_msg}")
+        self.finished_signal.emit({'type': 'sheerlink', 'count': success_count, 'summary': summary_msg})
 
     def run_open(self):
         """执行批量打开任务"""
@@ -411,7 +450,7 @@ class BrowserWindowCreatorGUI(QMainWindow):
     def ensure_data_files(self):
         """Ensure necessary data files exist"""
         base_path = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-        files = ["sheerIDlink.txt", "无资格号.txt", "2fa_codes.txt"]
+        files = ["sheerIDlink.txt", "无资格号.txt", "2fa_codes.txt", "已绑卡号.txt", "已验证未绑卡.txt", "超时或其他错误.txt"]
         for f in files:
             path = os.path.join(base_path, f)
             if not os.path.exists(path):
@@ -954,7 +993,11 @@ class BrowserWindowCreatorGUI(QMainWindow):
             
         elif result.get('type') == 'sheerlink':
             count = result.get('count', 0)
-            QMessageBox.information(self, "完成", f"SheerLink 提取任务结束\n成功提取: {count} 个\n结果保存在 sheerIDlink.txt")
+            summary = result.get('summary')
+            if summary:
+                 QMessageBox.information(self, "任务完成", summary)
+            else:
+                 QMessageBox.information(self, "完成", f"SheerLink 提取任务结束\n成功提取: {count} 个\n结果保存在 sheerIDlink.txt")
 
     def update_ui_state(self, running):
         """更新UI按钮状态"""

@@ -160,10 +160,10 @@ async def _automate_login_and_extract(playwright: Playwright, browser_id: str, a
 
         try:
             start_time = time.time()
-            # Polling loop for 6 seconds (User requested strict 6s timeout)
-            print("Checking for eligibility (max 6s)...")
+            # Polling loop for 10 seconds (User requested strict 10s timeout)
+            print("Checking for eligibility (max 10s)...")
             
-            while time.time() - start_time < 6:
+            while time.time() - start_time < 10:
                 # 1. Check for "Already Subscribed" phrases
                 is_subscribed = False
                 for phrase in subscribed_phrases:
@@ -335,20 +335,25 @@ async def _automate_login_and_extract(playwright: Playwright, browser_id: str, a
                     # Let's return False for now, but maybe user wants to see this.
                     await page.screenshot(path="debug_link_extraction_error.png")
             else:
-                # Timeout OR Explicit Invalid -> Both treated as Invalid Account
-                reason = "Offer not available" if is_invalid else "Timeout (6s allowed)"
-                print(f"Account marked as NOT eligible: {reason}")
-                
-                save_path_invalid = os.path.join(get_base_path(), "无资格号.txt")
-                with file_write_lock:
-                    with open(save_path_invalid, "a", encoding="utf-8") as f:
-                        f.write(f"{email}\n")
-                print(f"Saved to {save_path_invalid}")
-                
-                if not is_invalid:
-                     await page.screenshot(path="debug_eligibility_timeout.png")
-                
-                return False, f"无资格 ({reason})" 
+                if is_invalid:
+                    reason = "Offer not available"
+                    print(f"Account marked as NOT eligible: {reason}")
+                    save_path_invalid = os.path.join(get_base_path(), "无资格号.txt")
+                    with file_write_lock:
+                        with open(save_path_invalid, "a", encoding="utf-8") as f:
+                            f.write(f"{email}\n")
+                    print(f"Saved to {save_path_invalid}")
+                    return False, f"无资格 ({reason})"
+                else:
+                    reason = "Timeout (10s allowed)"
+                    print(f"Account timed out: {reason}")
+                    save_path_timeout = os.path.join(get_base_path(), "超时或其他错误.txt")
+                    with file_write_lock:
+                        with open(save_path_timeout, "a", encoding="utf-8") as f:
+                            f.write(f"{email}\n")
+                    print(f"Saved to {save_path_timeout}")
+                    await page.screenshot(path="debug_eligibility_timeout.png")
+                    return False, f"超时 ({reason})" 
 
         except Exception as e:
             print(f"Failed to extract check eligibility: {e}")
