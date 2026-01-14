@@ -19,6 +19,12 @@
 
         <div class="card">
             <div class="controls filters">
+                <strong>列显示：</strong>
+                <label><input type="checkbox" class="column-toggle" data-column="password" checked> 密码</label>
+                <label><input type="checkbox" class="column-toggle" data-column="recovery_email" checked> 辅助邮箱</label>
+                <label><input type="checkbox" class="column-toggle" data-column="secret_key" checked> 2FA密钥</label>
+                <label><input type="checkbox" class="column-toggle" data-column="verification_link" checked> SheerID链接</label>
+                <span style="margin: 0 15px;">|</span>
                 <strong>状态筛选：</strong>
                 <label><input type="checkbox" class="filter-cb" value="pending_check" checked> 待检测资格</label>
                 <label><input type="checkbox" class="filter-cb" value="link_ready" checked> 有资格待验证已提取链接</label>
@@ -37,10 +43,10 @@
                         <tr>
                             <th><input type="checkbox" id="selectAll"></th>
                             <th>邮箱</th>
-                            <th>密码</th>
-                            <th>辅助邮箱</th>
-                            <th>2FA 密钥</th>
-                            <th>SheerID 链接</th>
+                            <th data-column="password">密码</th>
+                            <th data-column="recovery_email">辅助邮箱</th>
+                            <th data-column="secret_key">2FA 密钥</th>
+                            <th data-column="verification_link">SheerID 链接</th>
                             <th>状态</th>
                         </tr>
                     </thead>

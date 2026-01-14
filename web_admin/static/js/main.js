@@ -11,6 +11,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = this.checked);
     });
     
+    // 列显示控制
+    document.querySelectorAll('.column-toggle').forEach(cb => {
+        cb.addEventListener('change', function() {
+            toggleColumn(this.getAttribute('data-column'), this.checked);
+            saveColumnSettings();
+        });
+    });
+    
+    // 加载保存的列显示设置
+    loadColumnSettings();
+    
     // 按钮事件
     document.getElementById('btnImport').addEventListener('click', showImportModal);
     document.getElementById('btnDelete').addEventListener('click', deleteSelected);
@@ -71,10 +82,10 @@ function renderTable() {
         tr.innerHTML = `
             <td><input type="checkbox" class="row-checkbox" data-email="${acc.email || ''}"></td>
             <td class="copyable" data-value="${acc.email || ''}">${acc.email || '-'}</td>
-            <td class="copyable" data-value="${acc.password || ''}">${acc.password || '-'}</td>
-            <td class="copyable" data-value="${acc.recovery_email || ''}">${acc.recovery_email || '-'}</td>
-            <td class="copyable" data-value="${acc.secret_key || ''}">${acc.secret_key || '-'}</td>
-            <td class="copyable link-cell" data-value="${acc.verification_link || ''}" title="${acc.verification_link || ''}">${acc.verification_link || '-'}</td>
+            <td class="copyable" data-column="password" data-value="${acc.password || ''}">${acc.password || '-'}</td>
+            <td class="copyable" data-column="recovery_email" data-value="${acc.recovery_email || ''}">${acc.recovery_email || '-'}</td>
+            <td class="copyable" data-column="secret_key" data-value="${acc.secret_key || ''}">${acc.secret_key || '-'}</td>
+            <td class="copyable link-cell" data-column="verification_link" data-value="${acc.verification_link || ''}" title="${acc.verification_link || ''}">${acc.verification_link || '-'}</td>
             <td><span class="status-badge status-${acc.status}">${mapStatus(acc.status)}</span></td>
         `;
         tbody.appendChild(tr);
@@ -260,4 +271,45 @@ function confirmImport() {
         console.error('导入失败:', err);
         alert('导入失败，请查看控制台日志');
     });
+}
+
+// 列显示控制相关函数
+function toggleColumn(columnName, show) {
+    // 切换表头
+    const thElements = document.querySelectorAll(`th[data-column="${columnName}"]`);
+    thElements.forEach(th => {
+        th.style.display = show ? '' : 'none';
+    });
+    
+    // 切换表格数据单元格
+    const tdElements = document.querySelectorAll(`td[data-column="${columnName}"]`);
+    tdElements.forEach(td => {
+        td.style.display = show ? '' : 'none';
+    });
+}
+
+function saveColumnSettings() {
+    const settings = {};
+    document.querySelectorAll('.column-toggle').forEach(cb => {
+        settings[cb.getAttribute('data-column')] = cb.checked;
+    });
+    localStorage.setItem('columnSettings', JSON.stringify(settings));
+}
+
+function loadColumnSettings() {
+    try {
+        const saved = localStorage.getItem('columnSettings');
+        if (saved) {
+            const settings = JSON.parse(saved);
+            document.querySelectorAll('.column-toggle').forEach(cb => {
+                const columnName = cb.getAttribute('data-column');
+                if (settings.hasOwnProperty(columnName)) {
+                    cb.checked = settings[columnName];
+                    toggleColumn(columnName, settings[columnName]);
+                }
+            });
+        }
+    } catch (e) {
+        console.error('加载列设置失败:', e);
+    }
 }
