@@ -22,6 +22,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // 加载保存的列显示设置
     loadColumnSettings();
     
+    // 列设置下拉菜单
+    const btnColumnSettings = document.getElementById('btnColumnSettings');
+    const columnSettingsMenu = document.getElementById('columnSettingsMenu');
+    
+    btnColumnSettings.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const isVisible = columnSettingsMenu.style.display === 'block';
+        columnSettingsMenu.style.display = isVisible ? 'none' : 'block';
+    });
+    
+    // 点击外部关闭菜单
+    document.addEventListener('click', function(e) {
+        if (!columnSettingsMenu.contains(e.target) && e.target !== btnColumnSettings) {
+            columnSettingsMenu.style.display = 'none';
+        }
+    });
+    
+    // 阻止菜单内部点击冒泡（避免点击复选框时关闭菜单）
+    columnSettingsMenu.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+    
     // 按钮事件
     document.getElementById('btnImport').addEventListener('click', showImportModal);
     document.getElementById('btnDelete').addEventListener('click', deleteSelected);
