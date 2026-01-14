@@ -519,7 +519,7 @@ class AutoAllInOneWindow(QWidget):
             conn = DBManager.get_connection()
             cursor = conn.cursor()
             
-            # 查询所有非已订阅和无资格的账号
+            # 查询所有非已订阅和无资格的账号（包括待检测资格的）
             cursor.execute("""
                 SELECT email, password, recovery_email, secret_key, verification_link 
                 FROM accounts 
@@ -528,7 +528,8 @@ class AutoAllInOneWindow(QWidget):
                     CASE status
                         WHEN 'link_ready' THEN 1
                         WHEN 'verified' THEN 2
-                        ELSE 3
+                        WHEN 'pending_check' THEN 3
+                        ELSE 4
                     END,
                     email
             """)

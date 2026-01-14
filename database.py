@@ -123,11 +123,11 @@ class DBManager:
                     sec = account.get('2fa_secret', '')
                     
                     if email:
-                        # 新账号默认状态为pending（待处理）
-                        DBManager.upsert_account(email, pwd, rec, sec, None, status='pending')
+                        # 新账号默认状态为pending_check（待检测资格）
+                        DBManager.upsert_account(email, pwd, rec, sec, None, status='pending_check')
                         count_total += 1
                 
-                print(f"成功导入 {count_total} 个账号（状态: pending）")
+                print(f"成功导入 {count_total} 个账号（状态: pending_check）")
             except Exception as e:
                 print(f"从 accounts.txt 导入时出错: {e}")
         
