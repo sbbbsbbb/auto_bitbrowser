@@ -212,7 +212,7 @@
                   <span class="btn-icon">📥</span>
                   导入账号
                 </button>
-                <button class="btn btn-secondary" onclick="exportAccounts()">
+                <button class="btn btn-secondary" onclick="showModal('export-accounts')">
                   <span class="btn-icon">📤</span>
                   导出
                 </button>
@@ -561,6 +561,59 @@ host:port"
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
         <button class="btn btn-primary" onclick="importCards()">导入</button>
+      </div>
+    </div>
+
+    <!-- 导出账号模态框 -->
+    <div class="modal" id="modal-export-accounts">
+      <div class="modal-header">
+        <h3 class="modal-title">导出账号</h3>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="label">筛选状态</label>
+          <select class="select" id="export-accounts-status">
+            <option value="">全部状态</option>
+            <option value="pending_check">待检查</option>
+            <option value="link_ready">链接就绪</option>
+            <option value="verified">已验证</option>
+            <option value="subscribed">已订阅</option>
+            <option value="ineligible">无资格</option>
+            <option value="error">错误</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="label">导出字段（可多选）</label>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-field-email" checked disabled> 邮箱
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-field-password" checked> 密码
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-field-recovery"> 辅助邮箱
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-field-secret"> 2FA密钥
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-field-link"> 验证链接
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-field-status"> 状态
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label">分隔符</label>
+          <input type="text" class="input" id="export-accounts-separator" value="----">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="exportAccounts()">导出</button>
       </div>
     </div>
 

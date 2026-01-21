@@ -275,8 +275,14 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             emails = set(params.get('emails', []))
             fields = params.get('fields', ['email', 'password', 'recovery_email', 'secret_key'])
             separator = params.get('separator', '----')
+            status_filter = params.get('status', '')  # 状态筛选
             
-            accounts = DBManager.get_all_accounts()
+            # 根据状态获取账号
+            if status_filter:
+                accounts = DBManager.get_accounts_by_status(status_filter)
+            else:
+                accounts = DBManager.get_all_accounts()
+            
             lines = []
             
             for acc in accounts:

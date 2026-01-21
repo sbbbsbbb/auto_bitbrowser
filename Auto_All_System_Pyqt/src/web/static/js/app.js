@@ -357,9 +357,23 @@ async function deleteSelectedAccounts() {
 }
 
 async function exportAccounts() {
+    // 获取筛选条件
+    const statusFilter = document.getElementById('export-accounts-status')?.value || '';
+    const separator = document.getElementById('export-accounts-separator')?.value || '----';
+    
+    // 获取要导出的字段
+    const fields = ['email']; // 邮箱始终导出
+    if (document.getElementById('export-field-password')?.checked) fields.push('password');
+    if (document.getElementById('export-field-recovery')?.checked) fields.push('recovery_email');
+    if (document.getElementById('export-field-secret')?.checked) fields.push('secret_key');
+    if (document.getElementById('export-field-link')?.checked) fields.push('verification_link');
+    if (document.getElementById('export-field-status')?.checked) fields.push('status');
+    
     try {
         const result = await api.post('/api/accounts/export', {
-            fields: ['email', 'password', 'recovery_email', 'secret_key']
+            fields,
+            separator,
+            status: statusFilter
         });
         
         // 创建下载
@@ -367,10 +381,12 @@ async function exportAccounts() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `accounts_export_${new Date().toISOString().slice(0,10)}.txt`;
+        const statusSuffix = statusFilter ? `_${statusFilter}` : '';
+        a.download = `accounts_export${statusSuffix}_${new Date().toISOString().slice(0,10)}.txt`;
         a.click();
         URL.revokeObjectURL(url);
         
+        closeModal();
         showToast(`导出 ${result.count} 个账号`, 'success');
     } catch (error) {
         showToast(`导出失败: ${error.message}`, 'error');

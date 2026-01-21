@@ -627,8 +627,8 @@ body::before {
   color: #34d399;
 }
 .status-tag.subscribed {
-  background: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
+  background: rgba(16, 185, 129, 0.3);
+  color: #10b981;
 }
 .status-tag.ineligible {
   background: rgba(239, 68, 68, 0.2);
@@ -806,6 +806,36 @@ input[type="checkbox"] {
   accent-color: var(--primary);
   cursor: pointer;
 }
+
+/* Checkbox Group */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.checkbox-label:hover {
+  border-color: var(--primary);
+}
+
+.checkbox-label input:checked + span,
+.checkbox-label:has(input:checked) {
+  color: var(--primary-light);
+}
+
 
 /* ==================== Modal ==================== */
 .modal-overlay {

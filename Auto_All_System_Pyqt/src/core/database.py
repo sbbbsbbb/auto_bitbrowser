@@ -152,8 +152,12 @@ class DBManager:
         @param line 账号信息行
         @param separator 分隔符
         @return 解析后的账号字典，失败返回None
-        @details 格式: email----password----recovery_email----secret_key
-                 或包含链接: link----email----password----recovery_email----secret_key
+        @details 支持格式:
+                 - email----password (2段)
+                 - email----password----recovery_email (3段，第3段含@)
+                 - email----password----secret_key (3段，第3段不含@)
+                 - email----password----recovery_email----secret_key (4段)
+                 - link----email----password----... (带链接前缀)
         """
         if not line or not line.strip():
             return None
@@ -173,11 +177,20 @@ class DBManager:
         if link_match:
             link = link_match.group()
             line = line.replace(link, '').strip()
-            line = re.sub(r'^[-]+', '', line).strip()
+            # 移除链接后的前导分隔符
+            if separator and line.startswith(separator):
+                line = line[len(separator):].strip()
+        
+        # 确保分隔符有效（处理用户输入）
+        if not separator or separator == '':
+            separator = '----'
         
         # 分割字段
         parts = line.split(separator)
         parts = [p.strip() for p in parts if p.strip()]
+        
+        if len(parts) < 2:
+            return None
         
         result = {
             'email': None,
@@ -187,28 +200,36 @@ class DBManager:
             'verification_link': link
         }
         
-        # 智能识别字段
-        emails = []
-        secrets = []
-        others = []
+        # 第一个字段：邮箱
+        if '@' in parts[0] and '.' in parts[0]:
+            result['email'] = parts[0]
+        else:
+            return None  # 第一个字段必须是邮箱
         
-        for part in parts:
-            if '@' in part and '.' in part:
-                emails.append(part)
-            elif re.match(r'^[A-Z0-9]{16,}$', part):
-                secrets.append(part)
+        # 第二个字段：密码
+        if len(parts) >= 2:
+            result['password'] = parts[1]
+        
+        # 第三个字段：智能识别（根据是否包含@判断是辅助邮箱还是2FA秘钥）
+        if len(parts) >= 3:
+            third_field = parts[2]
+            if '@' in third_field and '.' in third_field:
+                # 包含@，是辅助邮箱
+                result['recovery_email'] = third_field
             else:
-                others.append(part)
+                # 不包含@，是2FA秘钥（通常是大写字母+数字的组合）
+                result['secret_key'] = third_field
         
-        # 分配字段
-        if len(emails) >= 1:
-            result['email'] = emails[0]
-        if len(emails) >= 2:
-            result['recovery_email'] = emails[1]
-        if len(secrets) >= 1:
-            result['secret_key'] = secrets[0]
-        if len(others) >= 1:
-            result['password'] = others[0]
+        # 第四个字段：如果有，则根据第三个字段来判断
+        if len(parts) >= 4:
+            fourth_field = parts[3]
+            if result['recovery_email'] is None:
+                # 第三个是秘钥，第四个应该是辅助邮箱或其他
+                if '@' in fourth_field and '.' in fourth_field:
+                    result['recovery_email'] = fourth_field
+            else:
+                # 第三个是辅助邮箱，第四个应该是秘钥
+                result['secret_key'] = fourth_field
         
         return result if result['email'] else None
     
