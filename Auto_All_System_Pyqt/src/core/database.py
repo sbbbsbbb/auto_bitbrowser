@@ -1,6 +1,7 @@
 """
-统一数据库管理模块
-完全采用数据库存储，弃用txt文件导入
+@file database.py
+@brief 统一数据库管理模块
+@details 完全采用数据库存储，提供账号、代理、卡片等数据的统一管理
 """
 import sqlite3
 import os
@@ -9,35 +10,48 @@ import threading
 import re
 from datetime import datetime
 
-# 数据目录路径
-if getattr(sys, 'frozen', False):
-    # 打包后，数据文件在 exe 同级目录
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    # 开发时，数据文件在 data/ 目录
-    SRC_DIR = os.path.dirname(os.path.abspath(__file__))
-    BASE_DIR = os.path.join(os.path.dirname(SRC_DIR), 'data')
+# 数据目录路径 - 使用配置模块的路径
+try:
+    from .config import Config
+    BASE_DIR = Config.DATA_DIR
+    DB_PATH = Config.DB_PATH
+except ImportError:
+    # 兼容直接运行
+    if getattr(sys, 'frozen', False):
+        BASE_DIR = os.path.dirname(sys.executable)
+    else:
+        SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+        BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(SRC_DIR)), 'data')
+    DB_PATH = os.path.join(BASE_DIR, "accounts.db")
 
 # 确保数据目录存在
 os.makedirs(BASE_DIR, exist_ok=True)
-
-DB_PATH = os.path.join(BASE_DIR, "accounts.db")
 
 lock = threading.Lock()
 
 
 class DBManager:
-    """统一数据库管理类"""
+    """
+    @class DBManager
+    @brief 统一数据库管理类
+    @details 提供账号、代理、卡片、设置等数据的CRUD操作
+    """
     
     @staticmethod
     def get_connection():
+        """
+        @brief 获取数据库连接
+        @return sqlite3连接对象
+        """
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
 
     @staticmethod
     def init_db():
-        """初始化数据库，创建所有表"""
+        """
+        @brief 初始化数据库，创建所有表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -64,7 +78,6 @@ class DBManager:
             if 'browser_id' not in columns:
                 cursor.execute('ALTER TABLE accounts ADD COLUMN browser_id TEXT')
             if 'created_at' not in columns:
-                # SQLite不允许带非常量默认值的ALTER TABLE，只能添加不带默认值的列
                 cursor.execute('ALTER TABLE accounts ADD COLUMN created_at TIMESTAMP')
             
             # ==================== 代理表 ====================
@@ -135,9 +148,12 @@ class DBManager:
     @staticmethod
     def _parse_account_line(line, separator='----'):
         """
-        解析账号信息行
-        格式: email----password----recovery_email----secret_key
-        或包含链接: link----email----password----recovery_email----secret_key
+        @brief 解析账号信息行
+        @param line 账号信息行
+        @param separator 分隔符
+        @return 解析后的账号字典，失败返回None
+        @details 格式: email----password----recovery_email----secret_key
+                 或包含链接: link----email----password----recovery_email----secret_key
         """
         if not line or not line.strip():
             return None
@@ -157,7 +173,6 @@ class DBManager:
         if link_match:
             link = link_match.group()
             line = line.replace(link, '').strip()
-            # 清理可能残留的分隔符
             line = re.sub(r'^[-]+', '', line).strip()
         
         # 分割字段
@@ -200,15 +215,11 @@ class DBManager:
     @staticmethod
     def import_accounts_from_text(text, separator='----', default_status='pending_check'):
         """
-        从文本批量导入账号到数据库
-        
-        Args:
-            text: 多行文本，每行一个账号
-            separator: 分隔符
-            default_status: 默认状态
-            
-        Returns:
-            (success_count, error_count, errors)
+        @brief 从文本批量导入账号到数据库
+        @param text 多行文本，每行一个账号
+        @param separator 分隔符
+        @param default_status 默认状态
+        @return (success_count, error_count, errors)
         """
         lines = text.strip().split('\n')
         success_count = 0
@@ -244,7 +255,17 @@ class DBManager:
     @staticmethod
     def upsert_account(email, password=None, recovery_email=None, secret_key=None, 
                        link=None, browser_id=None, status=None, message=None):
-        """插入或更新账号信息"""
+        """
+        @brief 插入或更新账号信息
+        @param email 邮箱（主键）
+        @param password 密码
+        @param recovery_email 辅助邮箱
+        @param secret_key 2FA密钥
+        @param link 验证链接
+        @param browser_id 浏览器窗口ID
+        @param status 账号状态
+        @param message 状态消息
+        """
         if not email:
             return
             
@@ -287,12 +308,20 @@ class DBManager:
 
     @staticmethod
     def update_status(email, status, message=None):
-        """更新账号状态"""
+        """
+        @brief 更新账号状态
+        @param email 邮箱
+        @param status 新状态
+        @param message 状态消息
+        """
         DBManager.upsert_account(email, status=status, message=message)
     
     @staticmethod
     def delete_account(email):
-        """删除账号"""
+        """
+        @brief 删除账号
+        @param email 邮箱
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -302,7 +331,11 @@ class DBManager:
 
     @staticmethod
     def get_accounts_by_status(status):
-        """按状态获取账号"""
+        """
+        @brief 按状态获取账号
+        @param status 状态筛选条件
+        @return 账号列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -313,7 +346,10 @@ class DBManager:
     
     @staticmethod
     def get_accounts_without_browser():
-        """获取没有browser_id的账号"""
+        """
+        @brief 获取没有browser_id的账号
+        @return 账号列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -324,7 +360,10 @@ class DBManager:
             
     @staticmethod
     def get_all_accounts():
-        """获取所有账号"""
+        """
+        @brief 获取所有账号
+        @return 账号列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -335,7 +374,10 @@ class DBManager:
     
     @staticmethod
     def get_accounts_count_by_status():
-        """获取各状态账号统计"""
+        """
+        @brief 获取各状态账号统计
+        @return 状态统计字典
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -353,15 +395,14 @@ class DBManager:
     @staticmethod
     def import_proxies_from_text(text, proxy_type='socks5'):
         """
-        从文本批量导入代理
-        
-        支持格式:
-        - socks5://user:pass@host:port
-        - host:port:user:pass
-        - host:port
-        
-        Returns:
-            (success_count, error_count, errors)
+        @brief 从文本批量导入代理
+        @param text 多行代理文本
+        @param proxy_type 代理类型
+        @return (success_count, error_count, errors)
+        @details 支持格式:
+                 - socks5://user:pass@host:port
+                 - host:port:user:pass
+                 - host:port
         """
         lines = text.strip().split('\n')
         success_count = 0
@@ -395,7 +436,11 @@ class DBManager:
     
     @staticmethod
     def _parse_proxy_line(line):
-        """解析代理行"""
+        """
+        @brief 解析代理行
+        @param line 代理配置行
+        @return 代理配置字典
+        """
         line = line.strip()
         
         # 格式1: socks5://user:pass@host:port
@@ -434,7 +479,10 @@ class DBManager:
     
     @staticmethod
     def add_proxy(proxy_type, host, port, username=None, password=None, remark=None):
-        """添加代理"""
+        """
+        @brief 添加代理
+        @return 代理ID
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -449,7 +497,10 @@ class DBManager:
     
     @staticmethod
     def get_all_proxies():
-        """获取所有代理"""
+        """
+        @brief 获取所有代理
+        @return 代理列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -460,7 +511,11 @@ class DBManager:
     
     @staticmethod
     def get_available_proxies(limit=None):
-        """获取可用代理（未被使用的）"""
+        """
+        @brief 获取可用代理（未被使用的）
+        @param limit 限制数量
+        @return 代理列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -474,7 +529,11 @@ class DBManager:
     
     @staticmethod
     def mark_proxy_used(proxy_id, used_by_email):
-        """标记代理已使用"""
+        """
+        @brief 标记代理已使用
+        @param proxy_id 代理ID
+        @param used_by_email 使用者邮箱
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -488,7 +547,10 @@ class DBManager:
     
     @staticmethod
     def delete_proxy(proxy_id):
-        """删除代理"""
+        """
+        @brief 删除代理
+        @param proxy_id 代理ID
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -498,7 +560,9 @@ class DBManager:
     
     @staticmethod
     def clear_all_proxies():
-        """清空所有代理"""
+        """
+        @brief 清空所有代理
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -511,14 +575,13 @@ class DBManager:
     @staticmethod
     def import_cards_from_text(text, max_usage=1):
         """
-        从文本批量导入卡片
-        
-        支持格式:
-        - card_number exp_month exp_year cvv [holder_name]
-        - card_number----exp_month----exp_year----cvv
-        
-        Returns:
-            (success_count, error_count, errors)
+        @brief 从文本批量导入卡片
+        @param text 多行卡片文本
+        @param max_usage 最大使用次数
+        @return (success_count, error_count, errors)
+        @details 支持格式:
+                 - card_number exp_month exp_year cvv [holder_name]
+                 - card_number----exp_month----exp_year----cvv
         """
         lines = text.strip().split('\n')
         success_count = 0
@@ -543,7 +606,6 @@ class DBManager:
                     )
                     success_count += 1
                 except sqlite3.IntegrityError:
-                    # 卡号已存在，跳过
                     error_count += 1
                     errors.append(f"Line {line_num}: 卡号已存在")
                 except Exception as e:
@@ -557,7 +619,11 @@ class DBManager:
     
     @staticmethod
     def _parse_card_line(line):
-        """解析卡片行"""
+        """
+        @brief 解析卡片行
+        @param line 卡片配置行
+        @return 卡片配置字典
+        """
         line = line.strip()
         
         # 尝试空格分隔
@@ -587,7 +653,10 @@ class DBManager:
     @staticmethod
     def add_card(card_number, exp_month, exp_year, cvv, holder_name=None, 
                  billing_address=None, remark=None, max_usage=1):
-        """添加卡片"""
+        """
+        @brief 添加卡片
+        @return 卡片ID
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -604,7 +673,10 @@ class DBManager:
     
     @staticmethod
     def get_all_cards():
-        """获取所有卡片"""
+        """
+        @brief 获取所有卡片
+        @return 卡片列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -615,7 +687,10 @@ class DBManager:
     
     @staticmethod
     def get_available_cards():
-        """获取可用卡片（使用次数未达上限且激活的）"""
+        """
+        @brief 获取可用卡片（使用次数未达上限且激活的）
+        @return 卡片列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -630,7 +705,10 @@ class DBManager:
     
     @staticmethod
     def increment_card_usage(card_id):
-        """增加卡片使用次数"""
+        """
+        @brief 增加卡片使用次数
+        @param card_id 卡片ID
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -644,7 +722,10 @@ class DBManager:
     
     @staticmethod
     def delete_card(card_id):
-        """删除卡片"""
+        """
+        @brief 删除卡片
+        @param card_id 卡片ID
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -654,7 +735,9 @@ class DBManager:
     
     @staticmethod
     def clear_all_cards():
-        """清空所有卡片"""
+        """
+        @brief 清空所有卡片
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -664,7 +747,11 @@ class DBManager:
     
     @staticmethod
     def set_card_active(card_id, is_active):
-        """设置卡片激活状态"""
+        """
+        @brief 设置卡片激活状态
+        @param card_id 卡片ID
+        @param is_active 是否激活
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -679,7 +766,12 @@ class DBManager:
     
     @staticmethod
     def get_setting(key, default=None):
-        """获取设置值"""
+        """
+        @brief 获取设置值
+        @param key 设置键
+        @param default 默认值
+        @return 设置值
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -690,7 +782,12 @@ class DBManager:
     
     @staticmethod
     def set_setting(key, value, description=None):
-        """设置值"""
+        """
+        @brief 设置值
+        @param key 设置键
+        @param value 设置值
+        @param description 描述
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -703,7 +800,10 @@ class DBManager:
     
     @staticmethod
     def get_all_settings():
-        """获取所有设置"""
+        """
+        @brief 获取所有设置
+        @return 设置字典
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -716,7 +816,13 @@ class DBManager:
     
     @staticmethod
     def log_operation(operation_type, target_email=None, details=None, status='success'):
-        """记录操作日志"""
+        """
+        @brief 记录操作日志
+        @param operation_type 操作类型
+        @param target_email 目标邮箱
+        @param details 详情
+        @param status 状态
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -729,7 +835,11 @@ class DBManager:
     
     @staticmethod
     def get_recent_logs(limit=100):
-        """获取最近的操作日志"""
+        """
+        @brief 获取最近的操作日志
+        @param limit 限制条数
+        @return 日志列表
+        """
         with lock:
             conn = DBManager.get_connection()
             cursor = conn.cursor()
@@ -746,7 +856,9 @@ class DBManager:
     
     @staticmethod
     def export_to_files():
-        """将数据库导出为传统文本文件，方便查看"""
+        """
+        @brief 将数据库导出为传统文本文件，方便查看
+        """
         print("[DB] 开始导出数据库到文本文件...")
         
         files_map = {
@@ -811,12 +923,19 @@ class DBManager:
     
     @staticmethod
     def import_from_browsers():
-        """从比特浏览器窗口导入账号"""
+        """
+        @brief 从比特浏览器窗口导入账号
+        """
         import threading
         
         def _run_import():
             try:
-                from create_window import get_browser_list, parse_account_line
+                # 延迟导入避免循环依赖
+                try:
+                    from ..google.backend.create_window import get_browser_list, parse_account_line
+                except ImportError:
+                    # 兼容旧路径
+                    from create_window import get_browser_list, parse_account_line
                 
                 page = 0
                 page_size = 50
@@ -934,7 +1053,3 @@ class DBManager:
 
         t = threading.Thread(target=_run_import, daemon=True)
         t.start()
-
-
-# 初始化数据库（模块加载时自动执行）
-# DBManager.init_db()  # 注释掉，由调用方显式初始化

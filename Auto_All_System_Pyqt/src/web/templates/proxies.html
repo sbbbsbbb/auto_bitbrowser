@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代理管理 - Web Admin</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 代理管理</h1>
+            <nav class="nav-links">
+                <a href="/">账号管理</a>
+                <a href="/proxies" class="active">代理管理</a>
+                <a href="/cards">卡片管理</a>
+            </nav>
+        </header>
+
+        <div class="card">
+            <div class="toolbar">
+                <button id="btnImport" class="btn-success">📥 导入代理</button>
+                <button id="btnDelete" class="btn-danger">🗑️ 删除选中</button>
+                <button id="btnClear" class="btn-warning">⚠️ 清空所有</button>
+                <span class="spacer"></span>
+                <span id="countDisplay">加载中...</span>
+            </div>
+            
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAll"></th>
+                            <th>ID</th>
+                            <th>类型</th>
+                            <th>主机</th>
+                            <th>端口</th>
+                            <th>用户名</th>
+                            <th>密码</th>
+                            <th>状态</th>
+                            <th>已分配给</th>
+                        </tr>
+                    </thead>
+                    <tbody id="proxyTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入模态框 -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">导入代理</div>
+            <div class="modal-body">
+                <p>输入代理信息（每行一个）：</p>
+                <textarea id="importText" rows="10" style="width: 100%; font-family: monospace; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="支持以下格式：
+socks5://user:pass@host:port
+host:port:user:pass
+host:port"></textarea>
+                
+                <div style="margin-top: 15px;">
+                    <label><strong>代理类型：</strong></label>
+                    <select id="proxyType" style="padding: 5px; margin-left: 10px;">
+                        <option value="socks5" selected>SOCKS5</option>
+                        <option value="http">HTTP</option>
+                        <option value="https">HTTPS</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnCancelImport" class="btn-secondary">取消</button>
+                <button id="btnConfirmImport" class="btn-success">导入</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allProxies = [];
+        
+        // 加载代理列表
+        async function loadProxies() {
+            try {
+                const response = await fetch('/api/proxies');
+                allProxies = await response.json();
+                renderTable();
+            } catch (e) {
+                console.error('加载代理失败:', e);
+            }
+        }
+        
+        // 渲染表格
+        function renderTable() {
+            const tbody = document.getElementById('proxyTableBody');
+            tbody.innerHTML = '';
+            
+            document.getElementById('countDisplay').textContent = `共 ${allProxies.length} 个代理`;
+            
+            allProxies.forEach(proxy => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="row-checkbox" data-id="${proxy.id}"></td>
+                    <td>${proxy.id}</td>
+                    <td>${proxy.proxy_type || 'socks5'}</td>
+                    <td>${proxy.host}</td>
+                    <td>${proxy.port}</td>
+                    <td>${proxy.username || '-'}</td>
+                    <td>${proxy.password ? '••••••' : '-'}</td>
+                    <td><span class="status-badge ${proxy.is_used ? 'status-subscribed' : 'status-pending_check'}">${proxy.is_used ? '已使用' : '可用'}</span></td>
+                    <td>${proxy.used_by || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        // 全选
+        document.getElementById('selectAll').addEventListener('change', function() {
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = this.checked);
+        });
+        
+        // 获取选中的ID
+        function getSelectedIds() {
+            return Array.from(document.querySelectorAll('.row-checkbox:checked'))
+                .map(cb => parseInt(cb.dataset.id));
+        }
+        
+        // 导入按钮
+        document.getElementById('btnImport').addEventListener('click', () => {
+            document.getElementById('importModal').style.display = 'block';
+        });
+        
+        document.getElementById('btnCancelImport').addEventListener('click', () => {
+            document.getElementById('importModal').style.display = 'none';
+        });
+        
+        document.getElementById('btnConfirmImport').addEventListener('click', async () => {
+            const text = document.getElementById('importText').value.trim();
+            const type = document.getElementById('proxyType').value;
+            
+            if (!text) {
+                alert('请输入代理信息');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/proxies/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({proxies: text, type: type})
+                });
+                
+                const result = await response.json();
+                alert(`导入完成！\n成功: ${result.imported}\n失败: ${result.errors}`);
+                
+                document.getElementById('importModal').style.display = 'none';
+                document.getElementById('importText').value = '';
+                loadProxies();
+            } catch (e) {
+                alert('导入失败: ' + e.message);
+            }
+        });
+        
+        // 删除按钮
+        document.getElementById('btnDelete').addEventListener('click', async () => {
+            const ids = getSelectedIds();
+            if (ids.length === 0) {
+                alert('请先选择要删除的代理');
+                return;
+            }
+            
+            if (!confirm(`确定要删除选中的 ${ids.length} 个代理吗？`)) return;
+            
+            try {
+                await fetch('/api/proxies/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ids: ids})
+                });
+                loadProxies();
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
+        });
+        
+        // 清空按钮
+        document.getElementById('btnClear').addEventListener('click', async () => {
+            if (!confirm('确定要清空所有代理吗？此操作不可恢复！')) return;
+            
+            try {
+                await fetch('/api/proxies/clear', {method: 'POST'});
+                loadProxies();
+            } catch (e) {
+                alert('清空失败: ' + e.message);
+            }
+        });
+        
+        // 点击模态框外部关闭
+        window.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                e.target.style.display = 'none';
+            }
+        });
+        
+        // 初始加载
+        loadProxies();
+    </script>
+</body>
+</html>
