@@ -93,38 +93,48 @@ DEFAULT_TEMPLATE_CONFIG = {
   "abortMedia": False,
   "stopWhileNetError": False,
   "stopWhileCountryChange": False,
-  "syncTabs": False,
-  "syncCookies": False,
-  "syncIndexedDb": False,
-  "syncBookmarks": False,
-  "syncAuthorization": True,
-  "syncHistory": False,
+  # ========== 同步设置（保持登录状态） ==========
+  "syncTabs": True,              # 同步标签页
+  "syncCookies": True,           # 同步Cookie（重要！保持登录）
+  "syncIndexedDb": False,        # IndexedDB一般不需要
+  "syncBookmarks": False,        # 书签不同步
+  "syncAuthorization": True,     # 同步已保存的密码
+  "syncHistory": True,           # 同步历史记录
   "syncGoogleAccount": False,
   "allowedSignin": False,
-  "syncSessions": False,
+  "syncSessions": True,          # 同步会话（保持登录）
+  "syncExtensions": False,
+  "syncUserExtensions": False,
+  "syncLocalStorage": True,      # 同步LocalStorage（重要！保持登录）
+  "credentialsEnableService": False,
+  # ========== 启动设置（不清除数据） ==========
   "workbench": "localserver",
-  "clearCacheFilesBeforeLaunch": True,
-  "clearCookiesBeforeLaunch": False,
-  "clearHistoriesBeforeLaunch": False,
-  "randomFingerprint": True,
+  "clearCacheFilesBeforeLaunch": False,   # 不清除缓存文件
+  "clearCookiesBeforeLaunch": False,      # 不清除Cookie
+  "clearHistoriesBeforeLaunch": False,    # 不清除历史记录
+  "randomFingerprint": False,             # 不随机指纹（保持一致）
+  # ========== 其他设置 ==========
   "muteAudio": False,
   "disableGpu": False,
   "enableBackgroundMode": False,
-  "syncExtensions": False,
-  "syncUserExtensions": False,
-  "syncLocalStorage": False,
-  "credentialsEnableService": False,
   "disableTranslatePopup": False,
   "stopWhileIpChange": False,
   "disableClipboard": False,
   "disableNotifications": False,
   "memorySaver": False,
-  "isRandomFinger": True,
+  "isRandomFinger": False,        # 不随机指纹
   "isSynOpen": 1,
   "coreProduct": "chrome",
   "ostype": "PC",
   "os": "Win32",
-  "coreVersion": "140"
+  "coreVersion": "140",
+  # ========== 指纹对象（必传） ==========
+  "browserFingerPrint": {
+    "coreVersion": "140",
+    "ostype": "PC",
+    "os": "Win32",
+    "osVersion": "11,10"
+  }
 }
 
 class WorkerThread(QThread):
