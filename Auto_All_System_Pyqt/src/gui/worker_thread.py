@@ -18,11 +18,12 @@ class WorkerThread(QThread):
     """
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(dict)
+    progress_signal = pyqtSignal(int, int)  # current, total
     
     def __init__(self, task_type: str, **kwargs):
         """
         @brief 初始化工作线程
-        @param task_type 任务类型: 'sheerlink', 'create', 'delete', 'open'
+        @param task_type 任务类型: 'sheerlink', 'create', 'delete', 'open', '2fa'
         @param kwargs 任务参数
         """
         super().__init__()
@@ -47,14 +48,22 @@ class WorkerThread(QThread):
     
     def run(self):
         """执行任务"""
-        if self.task_type == 'sheerlink':
-            self.run_sheerlink()
-        elif self.task_type == 'create':
-            self.run_create()
-        elif self.task_type == 'delete':
-            self.run_delete()
-        elif self.task_type == 'open':
-            self.run_open()
+        try:
+            if self.task_type == 'sheerlink':
+                self.run_sheerlink()
+            elif self.task_type == 'create':
+                self.run_create()
+            elif self.task_type == 'delete':
+                self.run_delete()
+            elif self.task_type == 'open':
+                self.run_open()
+            elif self.task_type == '2fa':
+                self.run_2fa()
+        except Exception as e:
+            self.log(f"❌ 任务执行异常: {e}")
+            import traceback
+            traceback.print_exc()
+            self.finished_signal.emit({'type': self.task_type, 'error': str(e)})
     
     def run_sheerlink(self):
         """执行SheerLink提取任务 (多线程)"""
@@ -106,6 +115,8 @@ class WorkerThread(QThread):
                 
                 bid = future_to_id[future]
                 finished_tasks += 1
+                self.progress_signal.emit(finished_tasks, len(ids_to_process))
+                
                 try:
                     success, msg = future.result()
                     if success:
@@ -154,15 +165,209 @@ class WorkerThread(QThread):
     
     def run_create(self):
         """执行创建窗口任务"""
-        # TODO: 实现创建窗口的后台任务
-        self.finished_signal.emit({'type': 'create', 'count': 0})
+        accounts = self.kwargs.get('accounts', [])
+        name_prefix = self.kwargs.get('name_prefix', '默认模板')
+        template_id = self.kwargs.get('template_id', None)
+        proxies = self.kwargs.get('proxies', [])
+        platform_url = self.kwargs.get('platform_url', '')
+        extra_url = self.kwargs.get('extra_url', '')
+        
+        if not accounts:
+            self.log("❌ 未提供账号列表")
+            self.finished_signal.emit({'type': 'create', 'count': 0})
+            return
+        
+        self.log(f"\n[开始] 批量创建窗口，共 {len(accounts)} 个账号...")
+        
+        try:
+            from core.bit_api import create_browsers_batch
+            from core.database import DBManager
+        except ImportError as e:
+            self.log(f"❌ 导入失败: {e}")
+            self.finished_signal.emit({'type': 'create', 'count': 0, 'error': str(e)})
+            return
+        
+        created_count = 0
+        
+        def on_create(index, account, browser_id, error):
+            nonlocal created_count
+            email = account.get('email', '')
+            self.progress_signal.emit(index + 1, len(accounts))
+            
+            if browser_id:
+                self.log(f"  [{index+1}/{len(accounts)}] ✅ {email} -> {browser_id[:12]}...")
+                DBManager.update_account_browser_id(email, browser_id)
+                created_count += 1
+            else:
+                self.log(f"  [{index+1}/{len(accounts)}] ❌ {email}: {error}")
+        
+        def stop_check():
+            return not self.is_running
+        
+        # 批量创建
+        success, total = create_browsers_batch(
+            accounts=accounts,
+            name_prefix=name_prefix,
+            template_id=template_id,
+            proxies=proxies,
+            platform_url=platform_url,
+            extra_url=extra_url,
+            callback=on_create,
+            stop_check=stop_check
+        )
+        
+        if not self.is_running:
+            self.log("\n⚠️ 任务已停止")
+        
+        self.log(f"\n创建完成，成功 {created_count}/{total} 个")
+        self.finished_signal.emit({
+            'type': 'create', 
+            'count': created_count,
+            'total': total
+        })
     
     def run_delete(self):
         """执行删除窗口任务"""
-        # TODO: 实现删除窗口的后台任务
-        self.finished_signal.emit({'type': 'delete', 'count': 0})
+        ids_to_delete = self.kwargs.get('ids', [])
+        
+        if not ids_to_delete:
+            self.finished_signal.emit({'type': 'delete', 'count': 0})
+            return
+        
+        self.log(f"\n[开始] 批量删除窗口，共 {len(ids_to_delete)} 个...")
+        
+        try:
+            from core.bit_api import delete_browsers_batch
+        except ImportError as e:
+            self.log(f"❌ 导入失败: {e}")
+            self.finished_signal.emit({'type': 'delete', 'count': 0, 'error': str(e)})
+            return
+        
+        deleted_count = 0
+        failed_count = 0
+        
+        for i, bid in enumerate(ids_to_delete):
+            if not self.is_running:
+                self.log('[用户操作] 任务已停止')
+                break
+            
+            self.progress_signal.emit(i + 1, len(ids_to_delete))
+            
+            try:
+                result = delete_browsers_batch([bid])
+                if result.get('success'):
+                    self.log(f"  ✅ ({i+1}/{len(ids_to_delete)}) {bid[:12]}... 已删除")
+                    deleted_count += 1
+                else:
+                    self.log(f"  ❌ ({i+1}/{len(ids_to_delete)}) {bid[:12]}... 删除失败")
+                    failed_count += 1
+            except Exception as e:
+                self.log(f"  ❌ ({i+1}/{len(ids_to_delete)}) {bid[:12]}... 异常: {e}")
+                failed_count += 1
+            
+            self.msleep_safe(200)  # 避免API过载
+        
+        self.log(f"\n删除完成，成功 {deleted_count}，失败 {failed_count}")
+        self.finished_signal.emit({
+            'type': 'delete', 
+            'count': deleted_count,
+            'failed': failed_count
+        })
     
     def run_open(self):
         """执行打开窗口任务"""
-        # TODO: 实现打开窗口的后台任务
-        self.finished_signal.emit({'type': 'open', 'count': 0})
+        ids_to_open = self.kwargs.get('ids', [])
+        
+        if not ids_to_open:
+            self.finished_signal.emit({'type': 'open', 'count': 0})
+            return
+        
+        self.log(f"\n[开始] 批量打开窗口，共 {len(ids_to_open)} 个...")
+        
+        try:
+            from core.bit_api import open_browsers_batch
+        except ImportError as e:
+            self.log(f"❌ 导入失败: {e}")
+            self.finished_signal.emit({'type': 'open', 'count': 0, 'error': str(e)})
+            return
+        
+        opened_count = 0
+        failed_count = 0
+        
+        for i, bid in enumerate(ids_to_open):
+            if not self.is_running:
+                self.log('[用户操作] 任务已停止')
+                break
+            
+            self.progress_signal.emit(i + 1, len(ids_to_open))
+            
+            try:
+                result = open_browsers_batch([bid])
+                if result.get('success'):
+                    self.log(f"  ✅ ({i+1}/{len(ids_to_open)}) {bid[:12]}... 已打开")
+                    opened_count += 1
+                else:
+                    self.log(f"  ❌ ({i+1}/{len(ids_to_open)}) {bid[:12]}... 打开失败: {result.get('msg')}")
+                    failed_count += 1
+            except Exception as e:
+                self.log(f"  ❌ ({i+1}/{len(ids_to_open)}) {bid[:12]}... 异常: {e}")
+                failed_count += 1
+            
+            self.msleep_safe(500)  # 间隔打开，避免过载
+        
+        self.log(f"\n打开完成，成功 {opened_count}，失败 {failed_count}")
+        self.finished_signal.emit({
+            'type': 'open', 
+            'count': opened_count,
+            'failed': failed_count
+        })
+    
+    def run_2fa(self):
+        """生成并保存2FA验证码"""
+        self.log("\n[开始] 刷新2FA验证码...")
+        
+        try:
+            import pyotp
+            from core.bit_api import get_browser_list_simple
+        except ImportError as e:
+            self.log(f"❌ 导入失败: {e}")
+            self.finished_signal.emit({'type': '2fa', 'count': 0, 'error': str(e)})
+            return
+        
+        # 获取所有浏览器
+        browsers = get_browser_list_simple(page=0, page_size=1000)
+        
+        twofa_data = []
+        for browser in browsers:
+            if not self.is_running:
+                break
+            
+            name = browser.get('name', '')
+            remark = browser.get('remark', '')
+            
+            if '----' in remark:
+                parts = remark.split('----')
+                email = parts[0] if len(parts) > 0 else ''
+                secret = parts[3].strip() if len(parts) >= 4 else ''
+                
+                if secret:
+                    try:
+                        totp = pyotp.TOTP(secret.replace(" ", "").strip())
+                        code = totp.now()
+                        twofa_data.append({
+                            'name': name,
+                            'email': email,
+                            'secret': secret,
+                            'code': code
+                        })
+                    except Exception as e:
+                        self.log(f"  ⚠️ {email}: 2FA生成失败 - {e}")
+        
+        self.log(f"  生成了 {len(twofa_data)} 个2FA验证码")
+        
+        self.finished_signal.emit({
+            'type': '2fa', 
+            'count': len(twofa_data),
+            'data': twofa_data
+        })
+
